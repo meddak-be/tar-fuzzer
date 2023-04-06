@@ -29,7 +29,7 @@ int check_crash(char* extractor)
 {
     int rv = 0;
     char cmd[72];
-    strncpy(cmd, "./extractor archive2.tar", 70);
+    strncpy(cmd, "./extractor_x86_64 archive2.tar", 70);
     cmd[71] = '\0';
     //strncat(cmd, " archive2.tar", 25);
     char buf[33];
@@ -85,6 +85,9 @@ unsigned int calculate_checksum(struct tar_t* entry){
     return check;
 }
 
+
+
+
 void write()
 {
     FILE *fp;
@@ -101,6 +104,35 @@ void write()
     int success = check_crash("./extractor");
 }
 
+
+void test_field(char *field, char payloads[][100], size_t len)
+{
+    // Store the original value of the field to restore later
+    char original_value[100];
+    strcpy(original_value, field);
+
+    for (size_t i = 0; i < len; i++)
+    {
+        strcpy(field, payloads[i]);
+        calculate_checksum(&data);
+        write();
+    }
+
+    // Restore the original value of the field
+    strcpy(field, original_value);
+    calculate_checksum(&data);
+    write();
+}
+
+// void name()
+// {
+//     char name_payloads[][100] = {
+//         "a\x00\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
+//     };
+//     size_t len_name_payloads = sizeof name_payloads / sizeof (char[100]);
+//     test_field(data.name, name_payloads, len_name_payloads);
+
+// }
 
 void mtime()
 {
@@ -125,12 +157,27 @@ void mtime()
 }
 
 void name()
-{
-    char names[][100] = {"Ƿrojetѭچ", "test\n", "test\t", "test\a", "test\r", "\0", "      ",""};
+{   //"Ƿrojetѭچ", "test\n", "test\t", "test\a", "test\r", "\0", "      ","", 
+    char names[][105] = {"Ƿrojetѭچ", "test\n", "test\t", "test\a", "test\r", "\0", "      ","",
+    "test\x00name",
+    "test\x80name",
+    "test\\",
+    "test/",
+    "test\x1B[31m", // ANSI escape sequence
+    "test\x7F",     // DEL character
+    "test\x1A",     // SUB character
+    "test\x1C",     // FS character
+    "test\x1D",     // GS character
+    "test\x1E",     // RS character
+    "test\x1F",      // US character 
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    '\0'
+    };
     size_t len = sizeof names / sizeof (char[100]);
 
     for (size_t i = 0; i < len; i++)
     {
+        printf("trying %s\n", names[i]);
         strcpy(data.name, names[i]);
         calculate_checksum(&data);
         write();
@@ -148,11 +195,87 @@ void name()
     }
 
     char lnamereset[] = "\0";
-    strcpy(data.name, lnamereset);
+    strcpy(data.linkname, lnamereset);
     calculate_checksum(&data);
 }
 
+void uidgid()
+{
+    char uidB[8];
+    strcpy(uidB, data.uid);
+    printf("uid test (%s)\n", uidB);
+    char size[12];
+    long int sizes[] = {-100001, -1, 0, 500000, 999999};
 
+    size_t len = sizeof sizes / sizeof (long int);
+
+    for (size_t i = 0; i < len; i++)
+    {
+        snprintf(size, 12, "%o", sizes[i]); 
+        //size[0] = *"-";
+        printf("trying %s\n", size);
+        strcpy(data.uid, size);
+        calculate_checksum(&data);
+        write();
+    }
+    printf("trying %s\n", "fakeid");
+    strcpy(data.uid, "\0");
+    calculate_checksum(&data);
+    write();
+    
+    //reset to correct value
+    strcpy(data.uid, uidB);
+    calculate_checksum(&data);
+    write();
+}
+
+void size()
+{
+    char sizeB[12];
+    strcpy(sizeB, data.size);
+    printf("size test (%s)\n", sizeB);
+    char size[12];
+    long int sizes[] = {-00000000001, -1, 0, 500000, 999999999999};
+    size_t len = sizeof sizes / sizeof (long int);
+    for (size_t i = 0; i < len; i++)
+    {
+        snprintf(size, 12, "%o", sizes[i]); 
+        strcpy(data.size, size);
+        calculate_checksum(&data);
+        write();
+    }
+    // strcpy(data.size, "fakeSize");
+    // calculate_checksum(&data);
+    // write();
+    
+    //reset to correct value
+    strcpy(data.size, sizeB);
+    calculate_checksum(&data);
+    write();
+}
+
+void typeflag()
+{
+    char uidB;
+    uidB= data.typeflag;
+    printf("typeflag test (%c)\n", uidB);
+    char sizes[] = {" \n\r\x00\x7F\x1F\0"};
+
+    size_t len = sizeof sizes / sizeof (char[1]);
+    printf("%d\n", len);
+    for (size_t i = 0; i < len; i++)
+    {
+        printf("trying %c\n", sizes[i]);
+        data.typeflag = sizes[i];
+        calculate_checksum(&data);
+        write();
+    }
+    
+    //reset to correct value
+    data.typeflag = uidB;
+    calculate_checksum(&data);
+    write();
+}
 
 void read()
 {
@@ -174,10 +297,15 @@ int main(int argc, char const *argv[])
 {
     read();
 
-    printf("Checking mtime : \n");
-    mtime();
-    printf("Checking name : \n");
-    name();
+    // printf("Checking mtime : \n");
+    // mtime();
+    // printf("Checking name : \n");
+    // name();
+
+    // size();
+
+    // uidgid();
+    typeflag();
 
     // printf("%s, %s, %s, %s, %s\n", data.name, data.mode, data.uid, data.gid,data.size);
     // printf("%s, %s, %s\n", data.version, data.uname, data.gname);
