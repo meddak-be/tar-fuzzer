@@ -1,8 +1,82 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 struct tar_t data;
+
+
+// Function to write a tar file
+void write_tar_file(tar_header *header, const char *content, size_t content_length, const char *end_content, size_t end_length, int should_update_checksum) {
+    FILE *archive;
+
+    if (should_update_checksum) {
+        compute_checksum(header);
+    }
+
+    archive = fopen(TAR_ARCHIVE_NAME, "wb");
+    fwrite(header, sizeof(tar_header), 1, archive);
+    fwrite(content, content_length, 1, archive);
+    fwrite(end_content, end_length, 1, archive);
+    fclose(archive);
+}
+
+// Function to create an empty tar file
+void create_empty_tar_file(tar_header *header, int should_update_checksum) {
+    char zero_bytes[END_BYTES_COUNT] = {0};
+    write_tar_file(header, "", 0, zero_bytes, END_BYTES_COUNT, should_update_checksum);
+}
+
+// Function to set up a simple tar header
+void setup_simple_header(tar_header *header) {
+    memset(header, 0, sizeof(tar_header));
+
+    char file_name[100];
+    snprintf(file_name, 7, "%d.txt", (rand() % 100));
+
+    strcpy(header->name, file_name);
+    strcpy(header->mode, FULL_PERMISSIONS);
+    strcpy(header->uid, STANDARD_UID);
+    strcpy(header->gid, STANDARD_GID);
+    set_size(header, 0);
+    strcpy(header->mtime, "14220157140");
+    header->typeflag = REGTYPE;
+    header->linkname[0] = 0;
+    strcpy(header->magic, TMAGIC);
+    strcpy(header->version, TVERSION);
+
+    strcpy(header->uname, "root");
+    strcpy(header->gname, "root");
+    strcpy(header->devmajor, "0000000");
+    strcpy(header->devminor, "0000000");
+
+    compute_checksum(header);
+}
+
+// Tar header utility functions
+void set_size(tar_header *header, int size) {
+    snprintf(header->size, 12, "%011o", size);
+}
+
+void modify_header_field(char *field, size_t field_length, const char *new_value) {
+    strncpy(field, new_value, field_length);
+}
+
+unsigned int compute_checksum(tar_header *entry) {
+    memset(entry->chksum, ' ', 8);
+
+    unsigned int checksum_value = 0;
+    unsigned char *byte_data = (unsigned char *)entry;
+    for (int i = 0; i < 512; i++) {
+        checksum_value += byte_data[i];
+    }
+
+    snprintf(entry->chksum, sizeof(entry->chksum), "%06o0", checksum_value);
+
+    entry->chksum[6] = '\0';
+    entry->chksum[7] = ' ';
+    return checksum_value;
+}
 
 struct tar_t
 {                              /* byte offset */
@@ -104,33 +178,67 @@ void write()
     int success = check_crash("./extractor");
 }
 
-
-void test_field(char *field, char payloads[][100], size_t len)
+void end_bytes()
 {
+
+}
+
+
+
+void test_field(char *field)
+{
+    //Test for weird ascii and non ascii
+    size_t size = sizeof field;
+    char names[][105] = {"Ƿrojetѭچ", "test\n", "test\t", "test\a", "test\r", "\0", "      ","",
+    "test\x00name",
+    "test\x80name",
+    "test\\",
+    "test/",
+    "test\x1B", // ANSI escape sequence
+    "test\x7F",     // DEL character
+    "test\x1A",     // SUB character
+    "test\x1C",     // FS character
+    "test\x1D",     // GS character
+    "test\x1E",     // RS character
+    "test\x1F",      // US character 
+    '\0'
+    };
     // Store the original value of the field to restore later
     char original_value[100];
     strcpy(original_value, field);
 
+    size_t len = sizeof names / sizeof (char[105]);
     for (size_t i = 0; i < len; i++)
     {
-        strcpy(field, payloads[i]);
+        strcpy(field, names[i]);
         calculate_checksum(&data);
         write();
     }
+
+
+
+    strcpy(field, "9");
+    calculate_checksum(&data);
+    write();
+
+    char hex[size];
+    snprintf(hex, size, "%x", 26); 
+    strcpy(field, hex);
+    calculate_checksum(&data);
+    write();
+
+
 
     // Restore the original value of the field
     strcpy(field, original_value);
     calculate_checksum(&data);
     write();
+
 }
 
 // void name()
 // {
-//     char name_payloads[][100] = {
-//         "a\x00\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"
-//     };
-//     size_t len_name_payloads = sizeof name_payloads / sizeof (char[100]);
-//     test_field(data.name, name_payloads, len_name_payloads);
+//     test_field(data.name);
 
 // }
 
@@ -158,45 +266,10 @@ void mtime()
 
 void name()
 {   //"Ƿrojetѭچ", "test\n", "test\t", "test\a", "test\r", "\0", "      ","", 
-    char names[][105] = {"Ƿrojetѭچ", "test\n", "test\t", "test\a", "test\r", "\0", "      ","",
-    "test\x00name",
-    "test\x80name",
-    "test\\",
-    "test/",
-    "test\x1B[31m", // ANSI escape sequence
-    "test\x7F",     // DEL character
-    "test\x1A",     // SUB character
-    "test\x1C",     // FS character
-    "test\x1D",     // GS character
-    "test\x1E",     // RS character
-    "test\x1F",      // US character 
-    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    '\0'
-    };
-    size_t len = sizeof names / sizeof (char[100]);
-
-    for (size_t i = 0; i < len; i++)
-    {
-        printf("trying %s\n", names[i]);
-        strcpy(data.name, names[i]);
-        calculate_checksum(&data);
-        write();
-    }
-
-    char namereset[] = "normalName";
-    strcpy(data.name, namereset);
-    calculate_checksum(&data);
-
-    for (size_t i = 0; i < len; i++)
-    {
-        strcpy(data.linkname, names[i]);
-        calculate_checksum(&data);
-        write();
-    }
-
-    char lnamereset[] = "\0";
-    strcpy(data.linkname, lnamereset);
-    calculate_checksum(&data);
+    test_field(data.name);
+    test_field(data.linkname);
+    printf("size : \n");
+    test_field(data.mtime);
 }
 
 void uidgid()
@@ -299,13 +372,13 @@ int main(int argc, char const *argv[])
 
     // printf("Checking mtime : \n");
     // mtime();
-    // printf("Checking name : \n");
-    // name();
+    printf("Checking name : \n");
+    name();
 
     // size();
 
     // uidgid();
-    typeflag();
+    // typeflag();
 
     // printf("%s, %s, %s, %s, %s\n", data.name, data.mode, data.uid, data.gid,data.size);
     // printf("%s, %s, %s\n", data.version, data.uname, data.gname);
