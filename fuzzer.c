@@ -5,78 +5,40 @@
 
 struct tar_t data;
 
+#define TMAGIC   "ustar"        /* ustar and a null */
+#define TMAGLEN  6
+#define TVERSION "00"           /* 00 and no null */
+#define TVERSLEN 2
 
-// Function to write a tar file
-void write_tar_file(tar_header *header, const char *content, size_t content_length, const char *end_content, size_t end_length, int should_update_checksum) {
-    FILE *archive;
+/* Values used in typeflag field.  */
+#define REGTYPE  '0'            /* regular file */
+#define AREGTYPE '\0'           /* regular file */
+#define LNKTYPE  '1'            /* link */
+#define SYMTYPE  '2'            /* reserved */
+#define CHRTYPE  '3'            /* character special */
+#define BLKTYPE  '4'            /* block special */
+#define DIRTYPE  '5'            /* directory */
+#define FIFOTYPE '6'            /* FIFO special */
+#define CONTTYPE '7'            /* reserved */
 
-    if (should_update_checksum) {
-        compute_checksum(header);
-    }
+#define XHDTYPE  'x'            /* Extended header referring to the
+                                   next file in the archive */
+#define XGLTYPE  'g'            /* Global extended header */
 
-    archive = fopen(TAR_ARCHIVE_NAME, "wb");
-    fwrite(header, sizeof(tar_header), 1, archive);
-    fwrite(content, content_length, 1, archive);
-    fwrite(end_content, end_length, 1, archive);
-    fclose(archive);
-}
-
-// Function to create an empty tar file
-void create_empty_tar_file(tar_header *header, int should_update_checksum) {
-    char zero_bytes[END_BYTES_COUNT] = {0};
-    write_tar_file(header, "", 0, zero_bytes, END_BYTES_COUNT, should_update_checksum);
-}
-
-// Function to set up a simple tar header
-void setup_simple_header(tar_header *header) {
-    memset(header, 0, sizeof(tar_header));
-
-    char file_name[100];
-    snprintf(file_name, 7, "%d.txt", (rand() % 100));
-
-    strcpy(header->name, file_name);
-    strcpy(header->mode, FULL_PERMISSIONS);
-    strcpy(header->uid, STANDARD_UID);
-    strcpy(header->gid, STANDARD_GID);
-    set_size(header, 0);
-    strcpy(header->mtime, "14220157140");
-    header->typeflag = REGTYPE;
-    header->linkname[0] = 0;
-    strcpy(header->magic, TMAGIC);
-    strcpy(header->version, TVERSION);
-
-    strcpy(header->uname, "root");
-    strcpy(header->gname, "root");
-    strcpy(header->devmajor, "0000000");
-    strcpy(header->devminor, "0000000");
-
-    compute_checksum(header);
-}
-
-// Tar header utility functions
-void set_size(tar_header *header, int size) {
-    snprintf(header->size, 12, "%011o", size);
-}
-
-void modify_header_field(char *field, size_t field_length, const char *new_value) {
-    strncpy(field, new_value, field_length);
-}
-
-unsigned int compute_checksum(tar_header *entry) {
-    memset(entry->chksum, ' ', 8);
-
-    unsigned int checksum_value = 0;
-    unsigned char *byte_data = (unsigned char *)entry;
-    for (int i = 0; i < 512; i++) {
-        checksum_value += byte_data[i];
-    }
-
-    snprintf(entry->chksum, sizeof(entry->chksum), "%06o0", checksum_value);
-
-    entry->chksum[6] = '\0';
-    entry->chksum[7] = ' ';
-    return checksum_value;
-}
+/* Bits used in the mode field, values in octal.  */
+#define TSUID    04000          /* set UID on execution */
+#define TSGID    02000          /* set GID on execution */
+#define TSVTX    01000          /* reserved */
+                                /* file permissions */
+#define TUREAD   00400          /* read by owner */
+#define TUWRITE  00200          /* write by owner */
+#define TUEXEC   00100          /* execute/search by owner */
+#define TGREAD   00040          /* read by group */
+#define TGWRITE  00020          /* write by group */
+#define TGEXEC   00010          /* execute/search by group */
+#define TOREAD   00004          /* read by other */
+#define TOWRITE  00002          /* write by other */
+#define TOEXEC   00001          /* execute/search by other */
 
 struct tar_t
 {                              /* byte offset */
@@ -99,11 +61,27 @@ struct tar_t
     char padding[12];             /* 500 */
 };
 
+void init_tar_header(struct tar_t *header, const char *filename, const char *mode) {
+    memset(header, 0, sizeof(struct tar_t));
+    strncpy(header->name, filename, 100);
+    strncpy(header->mode, mode, 8);
+    strncpy(header->uid, "0000000", 8);
+    strncpy(header->gid, "0000000", 8);
+    strncpy(header->magic, "ustar", 6);
+    strncpy(header->version, "00", 2);
+    strncpy(header->uname, "unknown", 32);
+    strncpy(header->gname, "unknown", 32);
+    strncpy(header->prefix, "", 155);
+    header->typeflag = '0';
+    time_t mtime = time(NULL);
+    snprintf(header->mtime, 12, "%011lo", (unsigned long) mtime);
+}
+
 int check_crash(char* extractor)
 {
     int rv = 0;
     char cmd[72];
-    strncpy(cmd, "./extractor_x86_64 archive2.tar", 70);
+    strncpy(cmd, "./extractor_x86_64 archive3.tar", 70);
     cmd[71] = '\0';
     //strncat(cmd, " archive2.tar", 25);
     char buf[33];
@@ -159,37 +137,31 @@ unsigned int calculate_checksum(struct tar_t* entry){
     return check;
 }
 
-
-
-
 void write()
 {
     FILE *fp;
 
-    if ((fp = fopen("archive2.tar","wb")) == NULL)
+    if ((fp = fopen("archive3.tar","wb")) == NULL)
     {
         printf("Error! opening file");
         exit(1);
     }
     fwrite(&data, sizeof(struct tar_t), 1, fp);
+    // write the padding
+    char padding[512] = {0};
+    fwrite(padding, 512 - (sizeof(struct tar_t) % 512), 1, fp);
     
     fclose(fp);
     //save data as SUCCESS tar.
     int success = check_crash("./extractor");
 }
 
-void end_bytes()
-{
-
-}
 
 
-
-void test_field(char *field)
+void test_field(char *field, size_t size)
 {
     //Test for weird ascii and non ascii
-    size_t size = sizeof field;
-    char names[][105] = {"Ƿrojetѭچ", "test\n", "test\t", "test\a", "test\r", "\0", "      ","",
+    char names[][100] = {"testǷrojetѭچ", "test\n", "test\t", "test\a", "test\r", "\0", "      ","",
     "test\x00name",
     "test\x80name",
     "test\\",
@@ -203,11 +175,8 @@ void test_field(char *field)
     "test\x1F",      // US character 
     '\0'
     };
-    // Store the original value of the field to restore later
-    char original_value[100];
-    strcpy(original_value, field);
 
-    size_t len = sizeof names / sizeof (char[105]);
+    size_t len = sizeof names / sizeof (char[100]);
     for (size_t i = 0; i < len; i++)
     {
         strcpy(field, names[i]);
@@ -215,32 +184,34 @@ void test_field(char *field)
         write();
     }
 
+    // no terminate
+    printf("size : %d\n", size);
+    memset(field, 'a', size);
+    calculate_checksum(&data);
+    write();
 
-
+    //Test for non octal - decimal
     strcpy(field, "9");
     calculate_checksum(&data);
     write();
 
+    // Test for non octal - hex
     char hex[size];
     snprintf(hex, size, "%x", 26); 
     strcpy(field, hex);
     calculate_checksum(&data);
     write();
 
-
-
-    // Restore the original value of the field
-    strcpy(field, original_value);
-    calculate_checksum(&data);
-    write();
+    
 
 }
 
-// void name()
-// {
-//     test_field(data.name);
+void checksum()
+{
+    strcpy(data.name, "000");
+    write();
+}
 
-// }
 
 void mtime()
 {
@@ -254,56 +225,16 @@ void mtime()
         calculate_checksum(&data);
         write();
     }
-    strcpy(data.mtime, "time");
-    calculate_checksum(&data);
-    write();
     
     //reset to correct value
-    snprintf(time, 12, "%o", 1239291); 
-    strcpy(data.mtime, time);
-    calculate_checksum(&data);
+    init_tar_header(&data, "example.txt", "0644");
 }
 
-void name()
-{   //"Ƿrojetѭچ", "test\n", "test\t", "test\a", "test\r", "\0", "      ","", 
-    test_field(data.name);
-    test_field(data.linkname);
-    printf("size : \n");
-    test_field(data.mtime);
-}
 
-void uidgid()
-{
-    char uidB[8];
-    strcpy(uidB, data.uid);
-    printf("uid test (%s)\n", uidB);
-    char size[12];
-    long int sizes[] = {-100001, -1, 0, 500000, 999999};
-
-    size_t len = sizeof sizes / sizeof (long int);
-
-    for (size_t i = 0; i < len; i++)
-    {
-        snprintf(size, 12, "%o", sizes[i]); 
-        //size[0] = *"-";
-        printf("trying %s\n", size);
-        strcpy(data.uid, size);
-        calculate_checksum(&data);
-        write();
-    }
-    printf("trying %s\n", "fakeid");
-    strcpy(data.uid, "\0");
-    calculate_checksum(&data);
-    write();
-    
-    //reset to correct value
-    strcpy(data.uid, uidB);
-    calculate_checksum(&data);
-    write();
-}
 
 void size()
 {
+    //TODO improve
     char sizeB[12];
     strcpy(sizeB, data.size);
     printf("size test (%s)\n", sizeB);
@@ -350,39 +281,77 @@ void typeflag()
     write();
 }
 
-void read()
+void mode()
 {
-    FILE *fp;
-    
-    if ((fp = fopen("archive2.tar","rb")) == NULL){
-        printf("Error! opening file");
-        exit(1);
+    //all modes in the tar def
+    int modes[] = {TSUID, TSGID, TSVTX, TUREAD, TUWRITE, TUEXEC, TGREAD, TGWRITE, TGEXEC, TOREAD, TOWRITE, TOEXEC};
+
+    char Mode[];
+    for (int i = 0; i < 12; i++)
+    {
+        snprintf(Mode, 8, "%o", modes[i]); 
+        strcpy(data.mode, Mode);
+        calculate_checksum(&data);
+        write();
     }
-    fread(&data, sizeof(struct tar_t), 1, fp); 
-    fclose(fp); 
+
+    test_field(data.mode, sizeof data.mode);
+
 }
 
-char toChar(int i){
-    return (char)(48+i);
-}
+
 
 int main(int argc, char const *argv[])
 {
-    read();
+    init_tar_header(&data, "example.txt", "0644");
 
     // printf("Checking mtime : \n");
     // mtime();
     printf("Checking name : \n");
-    name();
+    test_field(data.name, sizeof data.name);
+    init_tar_header(&data, "example.txt", "0644");
 
-    // size();
+    printf("Checking linkname : \n");
+    test_field(data.linkname, sizeof data.linkname);
+    init_tar_header(&data, "example.txt", "0644");
 
-    // uidgid();
-    // typeflag();
+    printf("Checking mode : \n");
+    mode();
+    init_tar_header(&data, "example.txt", "0644");
 
-    // printf("%s, %s, %s, %s, %s\n", data.name, data.mode, data.uid, data.gid,data.size);
-    // printf("%s, %s, %s\n", data.version, data.uname, data.gname);
-    // printf("%s, %s, %c, %s, %s\n", data.mtime,data.chksum, data.typeflag, data.linkname, data.magic);
+    printf("Checking magic : \n");
+    test_field(data.magic, sizeof data.magic);
+    init_tar_header(&data, "example.txt", "0644");
+
+    printf("Checking uid : \n");
+    test_field(data.uid, sizeof data.uid);
+    init_tar_header(&data, "example.txt", "0644");
+
+    printf("Checking gid : \n");
+    test_field(data.gid, sizeof data.gid);
+    init_tar_header(&data, "example.txt", "0644");
+
+    printf("Checking mtime : \n");
+    mtime();
+    init_tar_header(&data, "example.txt", "0644");
+
+    printf("Checking uname : \n");
+    test_field(data.uname, sizeof data.gname);
+    init_tar_header(&data, "example.txt", "0644");
+
+    printf("Checking gname : \n");
+    test_field(data.gname, sizeof data.name);
+    init_tar_header(&data, "example.txt", "0644");
+
+    printf("Checking checksum : \n");
+    checksum();
+    init_tar_header(&data, "example.txt", "0644");
 
     return 0;
 }
+
+//TODO size - create a file and play with the size
+//     typeflag - try every char + non ascii + defined val
+//     try extreme val - memeset(1, size-1) and last byte nulbyte
+//     end bytes
+//     save success+ clean trash
