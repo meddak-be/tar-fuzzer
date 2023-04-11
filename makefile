@@ -7,4 +7,4 @@ copy:
 	rm archive2.tar && cp archive.tar archive2.tar
 
 clean:
-	rm test*
+	rm test* || rm archive*

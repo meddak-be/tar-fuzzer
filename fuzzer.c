@@ -40,6 +40,8 @@ struct tar_t data;
 #define TOWRITE  00002          /* write by other */
 #define TOEXEC   00001          /* execute/search by other */
 
+int SUCCESS, CURRENT;
+
 struct tar_t
 {                              /* byte offset */
     char name[100];               /*   0 */
@@ -77,13 +79,16 @@ void init_tar_header(struct tar_t *header, const char *filename, const char *mod
     snprintf(header->mtime, 12, "%011lo", (unsigned long) mtime);
 }
 
-int check_crash(char* extractor)
+int check_crash(char* extractor, char* archiveName)
 {
     int rv = 0;
-    char cmd[72];
-    strncpy(cmd, "./extractor_x86_64 archive3.tar", 70);
-    cmd[71] = '\0';
-    //strncat(cmd, " archive2.tar", 25);
+    char cmd[51];
+    strncpy(cmd, extractor, 25);
+    cmd[27] = '\0';
+    char spaced[20];
+    sprintf(spaced, " %s", archiveName);
+    strncat(cmd, spaced, 23);
+
     char buf[33];
 
     FILE *fp;
@@ -140,12 +145,11 @@ unsigned int calculate_checksum(struct tar_t* entry){
 void write()
 {
     FILE *fp;
+    char nameStr[40];
+    sprintf(nameStr, "archive%d.tar", CURRENT);
+    CURRENT++;
+    fp = fopen(nameStr,"wb");
 
-    if ((fp = fopen("archive3.tar","wb")) == NULL)
-    {
-        printf("Error! opening file");
-        exit(1);
-    }
     fwrite(&data, sizeof(struct tar_t), 1, fp);
     // write the padding
     char padding[512] = {0};
@@ -153,7 +157,15 @@ void write()
     
     fclose(fp);
     //save data as SUCCESS tar.
-    int success = check_crash("./extractor");
+    int success = check_crash("./extractor_x86_64", nameStr);
+    if (success)
+    {
+        FILE *fpsucces;
+        char successStr[40];
+        sprintf(successStr, "success_archive%d.tar", SUCCESS);
+        rename(nameStr, successStr);
+        SUCCESS++;
+    }
 }
 
 
@@ -286,7 +298,7 @@ void mode()
     //all modes in the tar def
     int modes[] = {TSUID, TSGID, TSVTX, TUREAD, TUWRITE, TUEXEC, TGREAD, TGWRITE, TGEXEC, TOREAD, TOWRITE, TOEXEC};
 
-    char Mode[];
+    char Mode[8];
     for (int i = 0; i < 12; i++)
     {
         snprintf(Mode, 8, "%o", modes[i]); 
@@ -303,10 +315,9 @@ void mode()
 
 int main(int argc, char const *argv[])
 {
+    SUCCESS = 0;
     init_tar_header(&data, "example.txt", "0644");
 
-    // printf("Checking mtime : \n");
-    // mtime();
     printf("Checking name : \n");
     test_field(data.name, sizeof data.name);
     init_tar_header(&data, "example.txt", "0644");
@@ -346,6 +357,9 @@ int main(int argc, char const *argv[])
     printf("Checking checksum : \n");
     checksum();
     init_tar_header(&data, "example.txt", "0644");
+
+    system("rm -f test*");
+    system("rm -f archive*");
 
     return 0;
 }
