@@ -4,6 +4,7 @@
 #include <time.h>
 
 struct tar_t data;
+char EXTRACTOR[25];
 
 #define TMAGIC   "ustar"        /* ustar and a null */
 #define TMAGLEN  6
@@ -79,11 +80,11 @@ void init_tar_header(struct tar_t *header, const char *filename, const char *mod
     snprintf(header->mtime, 12, "%011lo", (unsigned long) mtime);
 }
 
-int check_crash(char* extractor, char* archiveName)
+int check_crash(char* archiveName)
 {
     int rv = 0;
     char cmd[51];
-    strncpy(cmd, extractor, 25);
+    strncpy(cmd, EXTRACTOR, 25);
     cmd[27] = '\0';
     char spaced[20];
     sprintf(spaced, " %s", archiveName);
@@ -157,7 +158,7 @@ void write()
     
     fclose(fp);
     //save data as SUCCESS tar.
-    int success = check_crash("./extractor_x86_64", nameStr);
+    int success = check_crash(nameStr);
     if (success)
     {
         FILE *fpsucces;
@@ -214,6 +215,11 @@ void test_field(char *field, size_t size)
     calculate_checksum(&data);
     write();
 
+    //Test max value
+    memset(field, 1, size-1);
+    field[size] = "\0";
+    calculate_checksum(&data);
+    write();
     
 
 }
@@ -246,13 +252,11 @@ void mtime()
 
 void size()
 {
-    //TODO improve
-    char sizeB[12];
-    strcpy(sizeB, data.size);
-    printf("size test (%s)\n", sizeB);
+    //TODO improve (play with size)
+    test_field(data.size, sizeof data.size);
     char size[12];
-    long int sizes[] = {-00000000001, -1, 0, 500000, 999999999999};
-    size_t len = sizeof sizes / sizeof (long int);
+    int sizes[] = {0, 500, 99999};
+    size_t len = sizeof sizes / sizeof (int);
     for (size_t i = 0; i < len; i++)
     {
         snprintf(size, 12, "%o", sizes[i]); 
@@ -260,37 +264,34 @@ void size()
         calculate_checksum(&data);
         write();
     }
-    // strcpy(data.size, "fakeSize");
-    // calculate_checksum(&data);
-    // write();
-    
+
     //reset to correct value
-    strcpy(data.size, sizeB);
-    calculate_checksum(&data);
-    write();
+    init_tar_header(&data, "example.txt", "0644");
 }
 
 void typeflag()
 {
-    char uidB;
-    uidB= data.typeflag;
-    printf("typeflag test (%c)\n", uidB);
-    char sizes[] = {" \n\r\x00\x7F\x1F\0"};
+    //test special chars
+    char chars[] = {'\n','\r','\x7F','\x1F', 'Ƿ', 'چ','\0'}; 
 
-    size_t len = sizeof sizes / sizeof (char[1]);
-    printf("%d\n", len);
+    size_t len = sizeof chars / sizeof (char);
     for (size_t i = 0; i < len; i++)
     {
-        printf("trying %c\n", sizes[i]);
-        data.typeflag = sizes[i];
+        data.typeflag = chars[i];
+        calculate_checksum(&data);
+        write();
+    }
+
+    //test everything (The "real" values used in typeflag field are also tested)
+    for (int i = 0; i < 256; i++)
+    {
+        data.typeflag = (char) i;
         calculate_checksum(&data);
         write();
     }
     
     //reset to correct value
-    data.typeflag = uidB;
-    calculate_checksum(&data);
-    write();
+    init_tar_header(&data, "example.txt", "0644");
 }
 
 void mode()
@@ -315,6 +316,10 @@ void mode()
 
 int main(int argc, char const *argv[])
 {
+    if (argc < 2)
+        return -1;
+    strncpy(EXTRACTOR, argv[1], 25);
+
     SUCCESS = 0;
     init_tar_header(&data, "example.txt", "0644");
 
@@ -358,14 +363,15 @@ int main(int argc, char const *argv[])
     checksum();
     init_tar_header(&data, "example.txt", "0644");
 
+    printf("Checking size : \n");
+    size();
+    init_tar_header(&data, "example.txt", "0644");
+
     system("rm -f test*");
     system("rm -f archive*");
 
     return 0;
 }
 
-//TODO size - create a file and play with the size
-//     typeflag - try every char + non ascii + defined val
-//     try extreme val - memeset(1, size-1) and last byte nulbyte
+//TODO 
 //     end bytes
-//     save success+ clean trash
