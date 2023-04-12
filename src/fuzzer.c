@@ -195,7 +195,7 @@ void writeTestPadding(char padding[], size_t size_padding)
 }
 
 void padding(){
-
+    calculate_checksum(&data);
     size_t sizes_test[5] = {0, 1, 512, (512 - (sizeof(struct tar_t) % 512)), 512*2};
     char padding[512] = {0};
     for (size_t i = 0; i < 5; i++)
