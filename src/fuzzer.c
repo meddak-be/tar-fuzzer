@@ -169,6 +169,41 @@ void write()
     }
 }
 
+void writeTestPadding(char padding[], size_t size_padding)
+{
+    FILE *fp;
+    char nameStr[40];
+    sprintf(nameStr, "archive%d.tar", CURRENT);
+    CURRENT++;
+    fp = fopen(nameStr,"wb");
+
+    fwrite(&data, sizeof(struct tar_t), 1, fp);
+    // write the padding
+    fwrite(padding, size_padding, 1, fp);
+    
+    fclose(fp);
+    //save data as SUCCESS tar.
+    int success = check_crash(nameStr);
+    if (success)
+    {
+        FILE *fpsucces;
+        char successStr[40];
+        sprintf(successStr, "success_archive%d.tar", SUCCESS);
+        rename(nameStr, successStr);
+        SUCCESS++;
+    }
+}
+
+void padding(){
+
+    size_t sizes_test[5] = {0, 1, 512, (512 - (sizeof(struct tar_t) % 512)), 512*2};
+    char padding[512] = {0};
+    for (size_t i = 0; i < 5; i++)
+    {
+        writeTestPadding(padding,  sizes_test[i]);
+    }
+    
+}
 
 
 void test_field(char *field, size_t size)
@@ -366,6 +401,9 @@ int main(int argc, char const *argv[])
     printf("Checking size : \n");
     size();
     init_tar_header(&data, "example.txt", "0644");
+  
+    printf(">>> Checking padding : \n");
+    padding();
 
     system("rm -f test*");
     system("rm -f archive*");
