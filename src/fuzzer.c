@@ -64,6 +64,10 @@ struct tar_t
     char padding[12];             /* 500 */
 };
 
+
+/*
+Initialize the tar header with default values
+*/
 void init_tar_header(struct tar_t *header, const char *filename, const char *mode) {
     memset(header, 0, sizeof(struct tar_t));
     strncpy(header->name, filename, 100);
@@ -72,14 +76,18 @@ void init_tar_header(struct tar_t *header, const char *filename, const char *mod
     strncpy(header->gid, "0000000", 8);
     strncpy(header->magic, "ustar", 6);
     strncpy(header->version, "00", 2);
-    strncpy(header->uname, "unknown", 32);
-    strncpy(header->gname, "unknown", 32);
+    strncpy(header->uname, "name", 32);
+    strncpy(header->gname, "name", 32);
     strncpy(header->prefix, "", 155);
     header->typeflag = '0';
     time_t mtime = time(NULL);
     snprintf(header->mtime, 12, "%011lo", (unsigned long) mtime);
 }
 
+
+/*
+Function provided in help.c
+*/
 int check_crash(char* archiveName)
 {
     int rv = 0;
@@ -143,6 +151,10 @@ unsigned int calculate_checksum(struct tar_t* entry){
     return check;
 }
 
+
+/*
+Write the data in a tar file and calls the check_crash function
+*/
 void write()
 {
     FILE *fp;
@@ -155,7 +167,6 @@ void write()
     // write the padding
     char padding[512] = {0};
     fwrite(padding, 512 - (sizeof(struct tar_t) % 512), 1, fp);
-    
     fclose(fp);
     //save data as SUCCESS tar.
     int success = check_crash(nameStr);
@@ -169,7 +180,10 @@ void write()
     }
 }
 
-void writeTestPadding(char padding[], size_t size_padding)
+/*
+Write the end bytes
+*/
+void writePadding(char padding[], size_t size_padding)
 {
     FILE *fp;
     char nameStr[40];
@@ -194,18 +208,23 @@ void writeTestPadding(char padding[], size_t size_padding)
     }
 }
 
+/*
+Initialize the end of files bytes 
+*/
 void padding(){
     calculate_checksum(&data);
     size_t sizes_test[5] = {0, 1, 512, (512 - (sizeof(struct tar_t) % 512)), 512*2};
     char padding[512] = {0};
     for (size_t i = 0; i < 5; i++)
     {
-        writeTestPadding(padding,  sizes_test[i]);
+        writePadding(padding,  sizes_test[i]);
     }
     
 }
 
-
+/*
+Function that does generic test
+*/
 void test_field(char *field, size_t size)
 {
     //Test for weird ascii and non ascii
@@ -358,6 +377,7 @@ int main(int argc, char const *argv[])
     SUCCESS = 0;
     init_tar_header(&data, "example.txt", "0644");
 
+
     printf("Checking name : \n");
     test_field(data.name, sizeof data.name);
     init_tar_header(&data, "example.txt", "0644");
@@ -394,6 +414,10 @@ int main(int argc, char const *argv[])
     test_field(data.gname, sizeof data.name);
     init_tar_header(&data, "example.txt", "0644");
 
+    printf("Checking typeflag : \n");
+    typeflag();
+    init_tar_header(&data, "example.txt", "0644");
+
     printf("Checking checksum : \n");
     checksum();
     init_tar_header(&data, "example.txt", "0644");
@@ -402,7 +426,7 @@ int main(int argc, char const *argv[])
     size();
     init_tar_header(&data, "example.txt", "0644");
   
-    printf(">>> Checking padding : \n");
+    printf("Checking padding : \n");
     padding();
 
     system("rm -f test*");
