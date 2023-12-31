@@ -34,9 +34,6 @@ void craft()
  * @return -1 if the executable cannot be launched,
  *          0 if it is launched but does not print "*** The program has crashed ***",
  *          1 if it is launched and prints "*** The program has crashed ***".
- *
- * BONUS (for fun, no additional marks) without modifying this code,
- * compile it and use the executable to restart our computer.
  */
 int main(int argc, char* argv[])
 {
